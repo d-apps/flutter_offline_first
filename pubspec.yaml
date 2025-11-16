@@ -39,6 +39,7 @@ dependencies:
   flutter_bloc:
   dartz:
   uuid:
+  internet_connection_checker_plus:
 
 dev_dependencies:
   flutter_test:
