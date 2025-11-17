@@ -2,19 +2,15 @@ import 'package:flutter_offline_first/core/model/note_model.dart';
 import 'package:flutter_offline_first/core/repositories/local_repository.dart';
 import 'package:flutter_offline_first/core/repositories/remote_repository.dart';
 import 'package:flutter_offline_first/core/services/connection_service.dart';
-import 'package:flutter_offline_first/core/services/id_storage_service.dart';
 
 abstract class SyncService {
   Future<void> sync();
-  Future<void> _push();
-  Future<void> _pull();
   Future<void> listenConnectivityToSync();
 }
 
 class SyncServiceImpl implements SyncService {
   final RemoteRepository remoteRepository;
   final LocalRepository localRepository;
-  final IdStorageService idStorageService;
   final ConnectionService connectionService;
 
   bool _isSyncing = false;
@@ -22,7 +18,6 @@ class SyncServiceImpl implements SyncService {
   SyncServiceImpl({
     required this.remoteRepository,
     required this.localRepository,
-    required this.idStorageService,
     required this.connectionService,
   });
 
@@ -38,56 +33,59 @@ class SyncServiceImpl implements SyncService {
 
   @override
   Future<void> sync() async {
-    if(!hasConnection) return;
     await _runLocked(() async {
       await _push();
-
-      final pending = await idStorageService.getIds();
-      if (pending.isEmpty) {
-        await _pull();
-      } else {
-        print("Pending sync...cannot pull!");
-      }
+      await _pull();
     });
   }
 
-  @override
-  Future<void> _pull() async {
-    print("Pulling...");
-
-    final either = await remoteRepository.getAll();
-
+  Future<void> _push() async {
+    print("pushing first...");
+    final either = await localRepository.getAll();
     return either.fold(
-          (l) => print("Pull error: $l"),
+          (l) => print("Push error: $l"),
           (notes) async {
-            await localRepository.putAll(notes);
+
+        for (final note in notes) {
+          if(note.synced == false){
+            final result = await remoteRepository.put(
+                note.copyWith(synced: true)
+            );
+            result.fold(
+                  (failure) => print("Failed to send note to server: ${failure.message}"),
+                  (_){},
+            );
+          }
+        }
       },
     );
   }
 
-  @override
-  Future<void> _push() async {
-    print("Pushing...");
-
-    final ids = await idStorageService.getIds();
-    if (ids.isEmpty) return;
-
+  Future<bool> _canPull() async {
     final either = await localRepository.getAll();
-
     return either.fold(
-          (l) => print("Push error: $l"),
+          (f){
+            print("failed to get notes from local ${f.message}");
+            return false;
+          },
           (notes) async {
-            final notesToServer = notes.where((n) => ids.contains(n.id)).toList();
+            final pending = notes
+                .where((n) => n.synced == false)
+                .toList();
+            return pending.isEmpty;
+      },
+    );
+  }
 
-            for (final note in notesToServer) {
-              final result = await remoteRepository.put(note);
-              result.fold(
-                  (failure) => print("Failed to send note to server: ${failure.message}"),
-                  (_) async {
-                    await idStorageService.remove(note.id);
-                  },
-              );
-            }
+  Future<void> _pull() async {
+    print("pulling...");
+    final canPull = await _canPull();
+    if(!canPull) return;
+    final either = await remoteRepository.getAll();
+    return either.fold(
+          (l) => print("Pull error: $l"),
+          (notes) async {
+        await localRepository.putAll(notes);
       },
     );
   }
@@ -95,7 +93,7 @@ class SyncServiceImpl implements SyncService {
   Future<void> _runLocked(
       Future<void> Function() action
       ) async {
-        if (_isSyncing) return;
+        if (!hasConnection || _isSyncing) return;
         _isSyncing = true;
         try {
           await action();

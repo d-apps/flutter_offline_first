@@ -3,18 +3,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_offline_first/core/di/di.dart';
 import 'package:get_it/get_it.dart';
 import 'package:hive_ce/hive.dart';
+import 'package:path_provider/path_provider.dart';
 import 'core/model/note_adapter.dart';
 import 'features/home/home_page.dart';
 
-void initHiveDB() {
-  final path = Directory.current.path;
+Future<void> initHiveDB() async {
+  final path = (await getApplicationDocumentsDirectory()).path;
   Hive.init(path);
   Hive.registerAdapter(NoteAdapter());
 }
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  initHiveDB();
+  await initHiveDB();
   await initializeDependencies();
   runApp(const MyApp());
 }
@@ -35,6 +36,7 @@ class MyApp extends StatelessWidget {
       home: HomePage(
         local: getIt.get(),
         syncService: getIt.get(),
+        connectionService: getIt.get(),
       ),
     );
   }

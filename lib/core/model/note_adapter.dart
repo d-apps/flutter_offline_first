@@ -9,6 +9,7 @@ class NoteAdapter implements TypeAdapter<NoteModel>{
       title: reader.read(),
       createdAt: reader.read(),
       updatedAt: reader.read(),
+      synced: reader.read(),
     );
   }
 
@@ -21,6 +22,7 @@ class NoteAdapter implements TypeAdapter<NoteModel>{
     writer.write(obj.title);
     writer.write(obj.createdAt);
     writer.write(obj.updatedAt);
+    writer.write(obj.synced);
   }
 
 }

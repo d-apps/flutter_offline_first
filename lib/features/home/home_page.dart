@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_offline_first/core/repositories/local_repository.dart';
+import 'package:flutter_offline_first/core/services/connection_service.dart';
 import 'package:flutter_offline_first/core/services/sync_service.dart';
+import 'package:flutter_offline_first/features/home/widgets/note_tile.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/model/note_model.dart';
@@ -8,10 +11,12 @@ import '../../core/model/note_model.dart';
 class HomePage extends StatefulWidget {
   final LocalRepository local;
   final SyncService syncService;
+  final ConnectionService connectionService;
 
   const HomePage({
     required this.local,
     required this.syncService,
+    required this.connectionService,
     super.key
   });
 
@@ -22,6 +27,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   LocalRepository get local => widget.local;
   SyncService get syncService => widget.syncService;
+  ConnectionService get connectionService => widget.connectionService;
 
   final List<NoteModel> notes = [];
   NoteModel? currentNote;
@@ -30,26 +36,27 @@ class _HomePageState extends State<HomePage> {
 
   final uuid = const Uuid();
 
-  @override
-  void initState() {
-    getNotes();
-    super.initState();
-  }
-
   Future<void> getNotes() async {
     notes.clear();
     final either = await local.getAll();
     either.fold(
-      (failure){
-        print(failure.message);
-      },
-      (r) {
-        setState(() {
-          notes.addAll(r);
-          isLoading = false;
-        });
-      }
+            (failure){
+          print(failure.message);
+        },
+            (r) {
+          setState(() {
+            notes.addAll(r);
+            isLoading = false;
+          });
+        }
     );
+  }
+
+
+  @override
+  void initState() {
+    getNotes();
+    super.initState();
   }
 
   Future<void> addNote() async {
@@ -58,9 +65,10 @@ class _HomePageState extends State<HomePage> {
       title: controller.text,
       createdAt: DateTime.now(),
       updatedAt: null,
+      synced: false
     );
     final either = await local.put(note);
-    either.fold(
+    return either.fold(
           (failure){
             print(failure.message);
         },
@@ -75,10 +83,11 @@ class _HomePageState extends State<HomePage> {
   Future<void> updateNote() async {
     final note = currentNote!.copyWith(
         title: controller.text,
-        updatedAt: DateTime.now()
+        updatedAt: DateTime.now(),
+        synced: false
     );
     final either = await local.update(note);
-    either.fold(
+    return either.fold(
         (failure){
           print(failure.message);
         },
@@ -91,7 +100,7 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> deleteNote(String id) async {
     final either = await local.delete(id);
-    either.fold(
+    return either.fold(
         (failure){
           print(failure.message);
         },
@@ -105,95 +114,79 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text("Notes"),
-        actions: [
-          IconButton(
-            onPressed: (){
-              setState(() {
-                currentNote = null;
-                controller.clear();
-              });
-            },
-            icon: Icon(Icons.add)
-          )
-        ],
-      ),
-      body: isLoading ? Center(
-        child: CircularProgressIndicator(),
-      )
-      : Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            makeListOfNotes(notes),
-            makeBottomField()
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget makeListOfNotes(List<NoteModel> notes){
-    return Expanded(
-      child: ListView.builder(
-        itemCount: notes.length,
-        itemBuilder: (_, index) {
-          final note = notes[index];
-
-          bool isCurrent = currentNote?.id == note.id;
-
-          return ListTile(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: BorderSide(
-                color: isCurrent ? Colors.black54 :
-                  Colors.transparent
+    return ValueListenableBuilder<bool>(
+      valueListenable: connectionService.hasConnection,
+      builder: (context, hasConnection, child){
+        return Scaffold(
+          appBar: AppBar(
+            backgroundColor: hasConnection ? Colors.blue : Colors.red,
+            title: Text("Notes"),
+            actions: [
+              IconButton(
+                  onPressed: (){
+                    setState(() {
+                      currentNote = null;
+                      controller.clear();
+                    });
+                  },
+                  icon: Icon(Icons.add)
               )
-            ),
-            title: Text(note.title),
-            trailing: IconButton(
-                onPressed: (){
-                  deleteNote(note.id);
-                },
-                icon: Icon(Icons.close)
-            ),
-            onTap: (){
-              setState(() {
-                currentNote = note;
-                controller.text = note.title;
-              });
-            },
-          );
-        },
-      ),
-    );
-  }
-
-  Widget makeBottomField(){
-    return Row(
-      children: [
-        Expanded(
-          child: TextFormField(
-            controller: controller,
-            decoration: InputDecoration(
-              border: OutlineInputBorder(),
-            ),
-            maxLines: 2,
+            ],
           ),
-        ),
-        IconButton(
-            onPressed: (){
-              if(currentNote == null){
-                addNote();
-              } else {
-                updateNote();
-              }
-            },
-            icon: Icon(currentNote == null ? Icons.send : Icons.update)
-        )
-      ],
+          body: isLoading ? Center(
+            child: CircularProgressIndicator(),
+          )
+              : Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              children: [
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: notes.length,
+                    itemBuilder: (_, index) {
+                      final note = notes[index];
+                      return NoteTile(
+                        note: note,
+                        isCurrent: currentNote?.id == note.id,
+                        onNoteTap: (NoteModel note){
+                          setState(() {
+                            currentNote = note;
+                            controller.text = note.title;
+                          });
+                        },
+                        onDeleteNote: deleteNote,
+                      );
+                    },
+                  ),
+                ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: controller,
+                        decoration: InputDecoration(
+                          border: OutlineInputBorder(),
+                        ),
+                        maxLines: 2,
+                      ),
+                    ),
+                    IconButton(
+                        onPressed: (){
+                          if(currentNote == null){
+                            addNote();
+                          } else {
+                            updateNote();
+                          }
+                        },
+                        icon: Icon(currentNote == null ? Icons.send : Icons.update)
+                    )
+                  ],
+                )
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 

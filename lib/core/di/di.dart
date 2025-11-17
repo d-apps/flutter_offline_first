@@ -5,7 +5,6 @@ import 'package:flutter_offline_first/core/repositories/remote_repository.dart';
 import 'package:flutter_offline_first/core/repositories/remote_repository_impl.dart';
 import 'package:flutter_offline_first/core/services/cache_service.dart';
 import 'package:flutter_offline_first/core/services/connection_service.dart';
-import 'package:flutter_offline_first/core/services/id_storage_service.dart';
 import 'package:flutter_offline_first/core/services/sync_service.dart';
 import 'package:get_it/get_it.dart';
 
@@ -33,15 +32,10 @@ Future<void> initializeDependencies() async {
       cacheService: getIt.get(instanceName: "cache-remote")
   ));
 
-  getIt.registerSingleton<IdStorageService>(IdStorageServiceImpl(
-    cacheService: getIt.get(instanceName: "cache-ids")
-  ));
-
   final syncService = SyncServiceImpl(
     connectionService: getIt.get(),
     localRepository: getIt.get(),
     remoteRepository: getIt.get(),
-    idStorageService: getIt.get(),
   );
   syncService.listenConnectivityToSync();
   await syncService.sync();

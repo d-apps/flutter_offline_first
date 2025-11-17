@@ -10,7 +10,7 @@ abstract class ConnectionService {
 class ConnectionServiceImpl extends ChangeNotifier implements ConnectionService {
 
   @override
-  ValueNotifier<bool> hasConnection = ValueNotifier(false);
+  ValueNotifier<bool> hasConnection = ValueNotifier(true);
 
   @override
   void listenConnectivity() {

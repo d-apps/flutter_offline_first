@@ -14,7 +14,7 @@ class CacheServiceImpl<T> implements CacheService<T> {
   Future<List<T>> getAll(String key) async {
     try {
       final box = await Hive.openBox(boxName);
-      return List<T>.from(box.get(key));
+      return box.get(key) != null ? List<T>.from(box.get(key)) : [];
     } catch(e){
       throw Exception(e.toString());
     }
