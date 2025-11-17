@@ -36,10 +36,10 @@ dependencies:
   cupertino_icons: ^1.0.8
   path_provider:
   hive_ce: ^2.15.1
-  flutter_bloc:
   dartz:
   uuid:
   internet_connection_checker_plus:
+  get_it:
 
 dev_dependencies:
   flutter_test:
