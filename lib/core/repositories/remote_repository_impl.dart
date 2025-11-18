@@ -5,7 +5,7 @@ import '../errors/failure.dart';
 import '../services/cache_service.dart';
 
 class RemoteRepositoryImpl implements RemoteRepository {
-  final CacheService<NoteModel> cacheService;
+  final CacheService cacheService;
   RemoteRepositoryImpl({ required this.cacheService });
 
   @override
@@ -15,35 +15,28 @@ class RemoteRepositoryImpl implements RemoteRepository {
   Future<Either<Failure, List<NoteModel>>> getAll() async {
     print("getting all remotely...");
     try {
-      final response = await cacheService.getAll(key);
-      return Right(response);
+      final json = await cacheService.getAll(key);
+      final notes = json.map((e) => NoteModel.fromJson(e)).toList();
+      return Right(notes);
     } catch(e){
       return Left(Failure(e.toString()));
     }
   }
   
   @override
-  Future<Either<Failure, void>> put(NoteModel item) async {
+  Future<Either<Failure, void>> addOrUpdate(NoteModel item) async {
     print("putting remotely...");
     try {
-      final notes = await cacheService.getAll(key);
-      notes.add(item);
-      await cacheService.update(key, notes);
-      return Right(null);
-    } catch(e){
-      return Left(Failure(e.toString()));
-    }
-  }
-
-  @override
-  Future<Either<Failure, void>> update(NoteModel item) async {
-    print("updating remotely...");
-    try {
-      final notes = await cacheService.getAll(key);
-      final old = notes.firstWhere((element) => element.id == item.id);
-      final index = notes.indexOf(old);
-      notes[index] = item;
-      await cacheService.update(key, notes);
+      final json = await cacheService.getAll(key);
+      final notes = json.map((e) => NoteModel.fromJson(e)).toList();
+      if(!notes.any((n) => n.id == item.id)){
+        notes.add(item);
+      } else {
+        final old = notes.firstWhere((n) => n.id == item.id);
+        final index = notes.indexOf(old);
+        notes[index] = item;
+      }
+      await cacheService.update(key, notes.map((e) => e.toJson()).toList());
       return Right(null);
     } catch(e){
       return Left(Failure(e.toString()));
@@ -54,11 +47,12 @@ class RemoteRepositoryImpl implements RemoteRepository {
   Future<Either<Failure, void>> delete(String id) async {
     print("deleting remotely...");
     try {
-      final notes = await cacheService.getAll(key);
+      final json = await cacheService.getAll(key);
+      final notes = json.map((e) => NoteModel.fromJson(e)).toList();
       final old = notes.firstWhere((element) => element.id == id);
       final index = notes.indexOf(old);
       notes.removeAt(index);
-      await cacheService.update(key, notes);
+      await cacheService.update(key, notes.map((e) => e.toJson()).toList());
       return Right(null);
     } catch(e){
       return Left(Failure(e.toString()));
@@ -66,12 +60,10 @@ class RemoteRepositoryImpl implements RemoteRepository {
   }
 
   @override
-  Future<Either<Failure, void>> putAll(List<NoteModel> items) async {
+  Future<Either<Failure, void>> assignAll(List<NoteModel> items) async {
     print("putting all remotely...");
     try {
-      final notes = await cacheService.getAll(key);
-      notes.addAll(items);
-      await cacheService.update(key, notes);
+      await cacheService.update(key, items.map((e) => e.toJson()).toList() );
       return Right(null);
     } catch(e){
       return Left(Failure(e.toString()));

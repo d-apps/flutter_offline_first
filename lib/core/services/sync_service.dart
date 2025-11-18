@@ -1,7 +1,10 @@
+import 'package:flutter_offline_first/core/enums/operation_type_enum.dart';
 import 'package:flutter_offline_first/core/model/note_model.dart';
+import 'package:flutter_offline_first/core/model/pending_request_model.dart';
 import 'package:flutter_offline_first/core/repositories/local_repository.dart';
 import 'package:flutter_offline_first/core/repositories/remote_repository.dart';
 import 'package:flutter_offline_first/core/services/connection_service.dart';
+import 'package:flutter_offline_first/core/services/pending_request_service.dart';
 
 abstract class SyncService {
   Future<void> sync();
@@ -11,6 +14,7 @@ abstract class SyncService {
 class SyncServiceImpl implements SyncService {
   final RemoteRepository remoteRepository;
   final LocalRepository localRepository;
+  final PendingRequestService pendingRequestService;
   final ConnectionService connectionService;
 
   bool _isSyncing = false;
@@ -18,6 +22,7 @@ class SyncServiceImpl implements SyncService {
   SyncServiceImpl({
     required this.remoteRepository,
     required this.localRepository,
+    required this.pendingRequestService,
     required this.connectionService,
   });
 
@@ -39,42 +44,38 @@ class SyncServiceImpl implements SyncService {
     });
   }
 
-  Future<void> _push() async {
-    print("pushing first...");
-    final either = await localRepository.getAll();
-    return either.fold(
-          (l) => print("Push error: $l"),
-          (notes) async {
 
-        for (final note in notes) {
-          if(note.synced == false){
-            final result = await remoteRepository.put(
-                note.copyWith(synced: true)
-            );
-            result.fold(
-                  (failure) => print("Failed to send note to server: ${failure.message}"),
-                  (_){},
-            );
-          }
-        }
-      },
-    );
+  Future<void> _push() async {
+    print("pushing...");
+    final either = await pendingRequestService.getAll();
+    if(either.isLeft()) throw Exception("Failed to get pending requests");
+    final pending = either.getOrElse(() => []);
+
+    for (final item in pending) {
+      bool success = false;
+
+      switch(item.type){
+        case OperationTypeEnum.addOrUpdate:
+          final either = await remoteRepository.addOrUpdate(item.note);
+          success = either.isRight();
+          break;
+        case OperationTypeEnum.delete:
+          final either = await remoteRepository.delete(item.note.id);
+          success = either.isRight();
+          break;
+      }
+
+      if(success){
+        await pendingRequestService.delete(item.id);
+      }
+    }
   }
 
   Future<bool> _canPull() async {
-    final either = await localRepository.getAll();
-    return either.fold(
-          (f){
-            print("failed to get notes from local ${f.message}");
-            return false;
-          },
-          (notes) async {
-            final pending = notes
-                .where((n) => n.synced == false)
-                .toList();
-            return pending.isEmpty;
-      },
-    );
+    final either = await pendingRequestService.getAll();
+    if(either.isLeft()) return false;
+    final pending = either.getOrElse(() => []);
+    return pending.isEmpty;
   }
 
   Future<void> _pull() async {
@@ -82,12 +83,9 @@ class SyncServiceImpl implements SyncService {
     final canPull = await _canPull();
     if(!canPull) return;
     final either = await remoteRepository.getAll();
-    return either.fold(
-          (l) => print("Pull error: $l"),
-          (notes) async {
-        await localRepository.putAll(notes);
-      },
-    );
+    if(either.isLeft()) return;
+    final notes = either.getOrElse(() => []);
+    await localRepository.assignAll(notes);
   }
 
   Future<void> _runLocked(

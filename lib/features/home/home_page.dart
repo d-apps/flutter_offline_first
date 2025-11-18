@@ -37,6 +37,9 @@ class _HomePageState extends State<HomePage> {
   final uuid = const Uuid();
 
   Future<void> getNotes() async {
+    setState(() {
+      isLoading = true;
+    });
     notes.clear();
     final either = await local.getAll();
     either.fold(
@@ -65,9 +68,8 @@ class _HomePageState extends State<HomePage> {
       title: controller.text,
       createdAt: DateTime.now(),
       updatedAt: null,
-      synced: false
     );
-    final either = await local.put(note);
+    final either = await local.addOrUpdate(note);
     return either.fold(
           (failure){
             print(failure.message);
@@ -84,9 +86,8 @@ class _HomePageState extends State<HomePage> {
     final note = currentNote!.copyWith(
         title: controller.text,
         updatedAt: DateTime.now(),
-        synced: false
     );
-    final either = await local.update(note);
+    final either = await local.addOrUpdate(note);
     return either.fold(
         (failure){
           print(failure.message);

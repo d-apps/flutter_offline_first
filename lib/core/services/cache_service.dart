@@ -1,30 +1,31 @@
 import 'package:hive_ce/hive.dart';
 
-abstract class CacheService<T> {
-  Future<List<T>> getAll(String key);
-  Future<void> update(String key, List<T> value);
+abstract class CacheService {
+  Future<List<dynamic>> getAll(String key);
+  Future<void> update(String key, List<Map<String, dynamic>> value);
 }
 
-class CacheServiceImpl<T> implements CacheService<T> {
+class CacheServiceImpl implements CacheService {
 
   final String boxName;
   CacheServiceImpl({ required this.boxName });
 
   @override
-  Future<List<T>> getAll(String key) async {
+  Future<List<dynamic>> getAll(String key) async {
     try {
       final box = await Hive.openBox(boxName);
-      return box.get(key) != null ? List<T>.from(box.get(key)) : [];
+      final data = box.get(key);
+      return data != null ? List<dynamic>.from(data) : [];
     } catch(e){
       throw Exception(e.toString());
     }
   }
 
   @override
-  Future<void> update(String key, List<T> value) async {
+  Future<void> update(String key, List<Map<String, dynamic>> value) async {
     try {
       final box = await Hive.openBox(boxName);
-      box.put(key, value);
+      await box.put(key, value);
     } catch(e){
       throw Exception(e.toString());
     }
